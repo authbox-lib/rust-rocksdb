@@ -31,7 +31,7 @@ use rocksdb_ffi::{self, DBCFHandle, error_message};
 use rocksdb_options::Options;
 
 pub struct DB {
-    inner: rocksdb_ffi::DBInstance,
+    pub inner: rocksdb_ffi::DBInstance,
     cfs: BTreeMap<String, DBCFHandle>,
 }
 

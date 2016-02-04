@@ -18,8 +18,11 @@ pub use ffi::{DBCompactionStyle, DBComparator, new_bloom_filter};
 pub use rocksdb::{DB, DBIterator, DBVector, Direction, Writable, WriteBatch, IteratorMode};
 pub use rocksdb_options::{BlockBasedOptions, Options};
 pub use merge_operator::MergeOperands;
+pub use backup_engine::*;
+
 pub mod rocksdb;
 pub mod ffi;
 pub mod rocksdb_options;
 pub mod merge_operator;
 pub mod comparator;
+pub mod backup_engine;
