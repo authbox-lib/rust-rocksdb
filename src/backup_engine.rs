@@ -45,83 +45,96 @@ extern {
         err: *mut *const i8);
 }
 
-pub fn restore_options_create() -> rocksdb_restore_options_t {
-    unsafe { rocksdb_restore_options_create() }
+pub struct RestoreOption {
+    inner: rocksdb_restore_options_t
 }
 
-pub fn restore_options_destroy(opt: rocksdb_restore_options_t) {
-    unsafe { rocksdb_restore_options_destroy(opt) }
-}
-
-pub fn restore_options_set_keep_log_files(opt: rocksdb_restore_options_t, v: c_int) {
-    unsafe { rocksdb_restore_options_set_keep_log_files(opt, v) }
-}
-
-pub fn backup_engine_open(db_options: rocksdb_ffi::DBOptions, path: &str) -> Result<rocksdb_backup_engine_t, String> {
-    let cpath = match CString::new(path.as_bytes()) {
-        Ok(c) => c,
-        Err(_) => return Err("Failed to convert path to CString when opening backup".to_string()),
-    };
-
-    let mut err: *const i8 = 0 as *const i8;
-    let err_ptr: *mut *const i8 = &mut err;
-    let back_up_engine: rocksdb_backup_engine_t;
-
-    unsafe {
-        back_up_engine = rocksdb_backup_engine_open(db_options, cpath.as_ptr(), err_ptr);
+impl RestoreOption {
+    pub fn new() -> RestoreOption {
+        let inner = unsafe { rocksdb_restore_options_create() };
+        RestoreOption { inner: inner }
     }
-    if !err.is_null() {
-        return Err(error_message(err));
+    pub fn set_keep_log_files(&mut self, v: c_int) {
+        unsafe { rocksdb_restore_options_set_keep_log_files(self.inner, v) }
     }
-
-    Ok(back_up_engine)
 }
 
-pub fn backup_engine_close(be: rocksdb_backup_engine_t) {
-    unsafe { rocksdb_backup_engine_close(be) }
+impl Drop for RestoreOption {
+    fn drop(&mut self) {
+        unsafe { rocksdb_restore_options_destroy(self.inner); }
+    }
 }
 
-pub fn backup_engine_create_new_backup(be: rocksdb_backup_engine_t, db: rocksdb_ffi::DBInstance) -> Result<(),String> {
-    let mut err: *const i8 = 0 as *const i8;
-    let err_ptr: *mut *const i8 = &mut err;
-
-    unsafe {
-        rocksdb_backup_engine_create_new_backup(be, db, err_ptr)
-    }
-
-    if !err.is_null() {
-        return Err(error_message(err));
-    }
-
-    Ok(())
+pub struct BackupEngine {
+    inner: rocksdb_backup_engine_t
 }
 
-pub fn backup_engine_restore_from_latest_backup(be: rocksdb_backup_engine_t, db_dir: &str, wal_dir: &str, keep_wal: bool) -> Result<(), String> {
-    let c_db_dir = CString::new(db_dir.as_bytes()).unwrap();
-    let c_wal_dir = CString::new(wal_dir.as_bytes()).unwrap();
+impl BackupEngine {
+    pub fn new(db_options: rocksdb_ffi::DBOptions, path: &str) -> Result<BackupEngine, String> {
+        let cpath = match CString::new(path.as_bytes()) {
+            Ok(c) => c,
+            Err(_) => return Err("Failed to convert path to CString when opening backup".to_string()),
+        };
 
-    let mut err: *const i8 = 0 as *const i8;
-    let err_ptr: *mut *const i8 = &mut err;
-
-    unsafe {
-        let restore_options = restore_options_create();
-
-        if keep_wal {
-            restore_options_set_keep_log_files(restore_options, 1)
-        } else {
-            restore_options_set_keep_log_files(restore_options, 0)
+        let mut err: *const i8 = 0 as *const i8;
+        let err_ptr: *mut *const i8 = &mut err;
+        let back_up_engine: rocksdb_backup_engine_t = unsafe {
+            rocksdb_backup_engine_open(db_options, cpath.as_ptr(), err_ptr)
+        };
+        if !err.is_null() {
+            return Err(error_message(err));
         }
 
-        rocksdb_backup_engine_restore_db_from_latest_backup(be,
-                                                            c_db_dir.as_ptr(),
-                                                            c_wal_dir.as_ptr(),
-                                                            restore_options,
-                                                            err_ptr)
+        Ok(BackupEngine { inner: back_up_engine })
     }
 
-    if !err.is_null() {
-        return Err(error_message(err));
+    pub fn create_new_backup(&self, db: rocksdb_ffi::DBInstance) -> Result<(),String> {
+        let mut err: *const i8 = 0 as *const i8;
+        let err_ptr: *mut *const i8 = &mut err;
+
+        unsafe {
+            rocksdb_backup_engine_create_new_backup(self.inner, db, err_ptr)
+        }
+
+        if !err.is_null() {
+            return Err(error_message(err));
+        }
+
+        Ok(())
     }
 
-    Ok(())
+    pub fn restore_from_latest_backup(&self, db_dir: &str, wal_dir: &str, keep_wal: bool) -> Result<(), String> {
+        let c_db_dir = CString::new(db_dir.as_bytes()).unwrap();
+        let c_wal_dir = CString::new(wal_dir.as_bytes()).unwrap();
+
+        let mut err: *const i8 = 0 as *const i8;
+        let err_ptr: *mut *const i8 = &mut err;
+
+        let restore_options = &mut RestoreOption::new();
+
+        restore_options.set_keep_log_files(match keep_wal {
+            true => 1,
+            false => 0,
+        });
+
+        unsafe {
+            rocksdb_backup_engine_restore_db_from_latest_backup(self.inner,
+                                                                c_db_dir.as_ptr(),
+                                                                c_wal_dir.as_ptr(),
+                                                                restore_options.inner,
+                                                                err_ptr)
+        }
+
+        if !err.is_null() {
+            return Err(error_message(err));
+        }
+
+        Ok(())
+    }
+}
+
+impl Drop for BackupEngine {
+    fn drop(&mut self) {
+        unsafe { rocksdb_backup_engine_close(self.inner) }
+    }
 }
